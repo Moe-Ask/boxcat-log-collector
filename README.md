@@ -1,0 +1,1 @@
+# boxcat-log-collector
