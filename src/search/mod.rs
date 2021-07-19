@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 use crate::get_env;
 use crate::message::{Level, Message};
 use chrono::TimeZone;
+use meilisearch_sdk::dumps::{DumpInfo, DumpStatus};
 use meilisearch_sdk::indexes::IndexStats;
 use meilisearch_sdk::progress::UpdateStatus;
 use std::sync::atomic::{AtomicU64, Ordering};
-use meilisearch_sdk::dumps::{DumpInfo, DumpStatus};
 use tokio::time::Duration;
 
 static CLIENT: Lazy<Client> = Lazy::new(|| Client::new(get_host(), get_api_key()));
@@ -25,8 +25,6 @@ pub fn get_host() -> String {
 pub async fn is_meilisearch_running() -> bool {
     CLIENT.is_healthy().await
 }
-
-pub async fn a() {}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct LogIndex {
@@ -53,7 +51,7 @@ pub async fn add_documents(msgs: Vec<Message>) -> anyhow::Result<()> {
     static ATOMIC_ID: AtomicU64 = AtomicU64::new(0);
 
     if msgs.is_empty() {
-        return Ok(())
+        return Ok(());
     }
 
     let index = CLIENT.get_or_create("log").await?;
@@ -63,7 +61,12 @@ pub async fn add_documents(msgs: Vec<Message>) -> anyhow::Result<()> {
                 let mut v = Vec::with_capacity(msgs.len());
                 for msg in msgs {
                     v.push(LogIndex {
-                        uid: format!("{}-{}-{}", chrono::Local::now().timestamp_nanos(), &uuid::Uuid::new_v4().to_simple_ref().to_string(), ATOMIC_ID.fetch_add(1, Ordering::Release)),
+                        uid: format!(
+                            "{}-{}-{}",
+                            chrono::Local::now().timestamp_nanos(),
+                            &uuid::Uuid::new_v4().to_simple_ref().to_string(),
+                            ATOMIC_ID.fetch_add(1, Ordering::Release)
+                        ),
                         level: Level::from(msg.level).to_string(),
                         module: msg.module,
                         source: msg.source,
@@ -106,12 +109,15 @@ pub async fn dump() -> anyhow::Result<DumpInfo> {
 }
 
 pub async fn wait_for_dump(info: &DumpInfo, interval: Option<Duration>) -> anyhow::Result<bool> {
-    let mut interval = tokio::time::interval(interval.unwrap_or_else(|| Duration::from_millis(1000)));
+    let mut interval =
+        tokio::time::interval(interval.unwrap_or_else(|| Duration::from_millis(1000)));
     loop {
         match CLIENT.get_dump_status(&info.uid).await?.status {
             DumpStatus::Done => return Ok(true),
             DumpStatus::Failed => return Ok(false),
-            DumpStatus::InProgress => { interval.tick().await; },
+            DumpStatus::InProgress => {
+                interval.tick().await;
+            }
         }
     }
 }

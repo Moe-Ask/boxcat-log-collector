@@ -1,6 +1,6 @@
-use crate::message::{handle_message, Level, Message, handle_messages};
-use crate::{init, run};
+use crate::message::{handle_message, handle_messages, Level, Message};
 use crate::search::{all_updated, get_stats};
+use crate::{init, run};
 use std::env::set_var;
 use std::sync::atomic::{AtomicU32, Ordering};
 

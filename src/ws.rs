@@ -18,9 +18,13 @@ pub async fn run(tx: Sender<crate::message::Message>) -> anyhow::Result<()> {
     info!("Listening on: {}", addr);
 
     while let Ok((stream, _)) = listener.accept().await {
-        let peer = stream
-            .peer_addr()
-            .with_context(|| "connected streams should have a peer address")?;
+        let peer = match stream.peer_addr() {
+            Ok(addr) => addr,
+            Err(e) => {
+                error!("connected streams should have a peer address. {}", e);
+                continue;
+            }
+        };
         info!("Peer address: {}", peer);
 
         tokio::spawn(accept_connection(peer, stream, tx.clone()));
@@ -48,7 +52,7 @@ async fn handle_connection(
     stream: TcpStream,
     tx: Sender<crate::message::Message>,
 ) -> tokio_tungstenite::tungstenite::error::Result<()> {
-    let ws_stream = accept_async(stream).await.expect("Failed to accept");
+    let ws_stream = accept_async(stream).await?;
     info!("New WebSocket connection: {}", peer);
 
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
@@ -59,14 +63,27 @@ async fn handle_connection(
                 if msg.is_ping() {
                     ws_sender.send(Message::Pong(vec![0x04])).await?;
                 } else if msg.is_binary() {
-                    tx.send({
-                        let mut msg =
-                            crate::message::Message::deserialize(&msg.into_data()).unwrap();
-                        msg.source = Some(peer.to_string());
-                        msg
-                    })
-                    .await
-                    .unwrap();
+                    if let Err(e) = tx
+                        .send({
+                            let mut msg = match crate::message::Message::deserialize(
+                                &msg.into_data(),
+                            ) {
+                                Ok(msg) => msg,
+                                Err(err) => {
+                                    warn!(
+                                        "消息格式错误. 从{}收到的消息无法反序列化. 连接关闭. {}",
+                                        &peer, err
+                                    );
+                                    break;
+                                }
+                            };
+                            msg.source = Some(peer.to_string());
+                            msg
+                        })
+                        .await
+                    {
+                        error!("向处理队列发送消息时发生错误: {}", e);
+                    }
                 } else if msg.is_text() {
                     warn!("未知的ws消息: {:?}", msg.into_text())
                 } else if msg.is_close() {

@@ -5,11 +5,11 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use std::mem::swap;
+use std::sync::Arc;
 use tokio::fs::{File, OpenOptions};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use std::mem::swap;
-use std::sync::Arc;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Message {
@@ -162,14 +162,14 @@ pub async fn handle_messages(mut rx: Receiver<Message>) -> anyhow::Result<()> {
     loop {
         while let Some(msg) = rx.recv().await {
             if msg.level >= Level::Trace as u8 {
-                continue
+                continue;
             }
             match handle_message(msg).await {
                 Err(err) => log::error!("handle message error: {}", err),
-                Ok(msg) => msgs.lock().await.push(msg)
+                Ok(msg) => msgs.lock().await.push(msg),
             }
         }
-        return Ok(())
+        return Ok(());
     }
 }
 
